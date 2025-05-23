@@ -111,7 +111,20 @@ export const users = async (
         }
       )
     );
+    console.log(userList.flat().sort(
+      (a: IUser.IUser, b: IUser.IUser): number => {
+        if (a.name > b.name) {
+          return 1;
+        }
 
+        if (a.name < b.name) {
+          return -1;
+        }
+
+        return 0;
+      }
+    ));
+    
     return {
       status: 200,
       data: userList.flat().reduce(
@@ -119,25 +132,17 @@ export const users = async (
           const isDuplicate = accumulator.some((userB: IUser.IUser): boolean => userA.guid === userB.guid);
           
           if (!isDuplicate) {
-            accumulator.push({ id: userA.id, name: userA.name });
+            accumulator.push({ id: userA.id, name: userA.name, guid: userA.guid });
           }
   
           return accumulator;
         },
         [] as IUser.IUser[]
-      ).sort(
-        (a: IUser.IUser, b: IUser.IUser): number => {
-          if (a.name > b.name) {
-            return 1;
-          }
-
-          if (a.name < b.name) {
-            return -1;
-          }
-
-          return 0;
+      ).map(
+        (user: IUser.IUser): IUser.IUser => {
+          return { id: user.id, name: user.name }
         }
-      )
+      ).sort((a: IUser.IUser, b: IUser.IUser): number => a.name.localeCompare(b.name))
     };
   } catch (error: unknown) {
     console.log(`Service | Timestamp: ${ timestamp } | Name: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
