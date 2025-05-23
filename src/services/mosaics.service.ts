@@ -114,7 +114,19 @@ export const mosaics = async (
 
     return {
       status: 200,
-      data: mosaicList.flat().sort((a: IMosaic.IMosaic, b: IMosaic.IMosaic): number => a.id - b.id)
+      data: mosaicList.flat().sort(
+        (a: IMosaic.IMosaic, b: IMosaic.IMosaic): number => {
+          if (a.name > b.name) {
+            return 1;
+          }
+
+          if (a.name < b.name) {
+            return -1;
+          }
+
+          return 0;
+        }
+      )
     };
   } catch (error: unknown) {
     console.log(`Service | Timestamp: ${ timestamp } | Name: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
