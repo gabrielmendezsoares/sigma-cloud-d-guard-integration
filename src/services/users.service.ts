@@ -100,7 +100,7 @@ export const users = async (
               (workstation: IWorkstation.IWorkstation): IUser.IUser | null => {
                 const dGuardWorkstation = dGuardWorkstationMap.get(workstation.guid);
                 
-                return dGuardWorkstation ? { id: dGuardWorkstation.id, name: workstation.name } : null;
+                return dGuardWorkstation ? { id: dGuardWorkstation.id, name: workstation.name, guid: workstation.guid } : null;
               }
             ).filter(Boolean) as IUser.IUser[];
           } catch (error: unknown) {
@@ -114,7 +114,30 @@ export const users = async (
 
     return {
       status: 200,
-      data: userList.flat().sort((a: IUser.IUser, b: IUser.IUser): number => a.id - b.id)
+      data: userList.flat().reduce(
+        (accumulator: IUser.IUser[], userA: IUser.IUser) => {
+          const isDuplicate = accumulator.some((userB: IUser.IUser): boolean => userA.guid === userB.guid);
+          
+          if (!isDuplicate) {
+            accumulator.push({ id: userA.id, name: userA.name });
+          }
+  
+          return accumulator;
+        },
+        [] as IUser.IUser[]
+      ).sort(
+        (a: IUser.IUser, b: IUser.IUser): number => {
+          if (a.name > b.name) {
+            return 1;
+          }
+
+          if (a.name < b.name) {
+            return -1;
+          }
+
+          return 0;
+        }
+      )
     };
   } catch (error: unknown) {
     console.log(`Service | Timestamp: ${ timestamp } | Name: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
