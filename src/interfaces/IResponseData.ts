@@ -20,7 +20,7 @@ export interface IGetHealthResponseData {
   query: Record<string, any>;
   headers: Record<string, any>;
   body: any;
-  data: {
+  monitor: {
     cpuUsage: {
       name: string;
       value: string;
