@@ -41,13 +41,12 @@ export const mosaics = async (
                     new TextDecoder().decode(password)
                   ) 
                 },
-                (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken,
-                (): number => 0
+                (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken
               )
             );
           
-            const { data: serverApiVirtualMatrixLayoutsData } = await httpClientInstance.get<{ layouts: ILayout.ILayout[]; }>(`http://${ ip }:${ port }/api/virtual-matrix/layouts`);      
-            const layoutList = serverApiVirtualMatrixLayoutsData.layouts;
+            const serverApiVirtualMatrixLayouts = await httpClientInstance.get<{ layouts: ILayout.ILayout[]; }>(`http://${ ip }:${ port }/api/virtual-matrix/layouts`);      
+            const layoutList = serverApiVirtualMatrixLayouts.data.layouts;
             const layoutGuidList = layoutList.map((layout: ILayout.ILayout): string => layout.guid);
             
             if (layoutGuidList.length > 0) {
@@ -104,7 +103,7 @@ export const mosaics = async (
               }
             ).filter(Boolean) as IMosaic.IMosaic[];
           } catch (error: unknown) {
-            console.log(`Service | Timestamp: ${ timestamp } | Name: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
+            console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
             return [];
           }
@@ -114,22 +113,24 @@ export const mosaics = async (
 
     return {
       status: 200,
-      data: mosaicList.flat().sort(
-        (a: IMosaic.IMosaic, b: IMosaic.IMosaic): number => {
-          if (a.name > b.name) {
-            return 1;
-          }
+      data: mosaicList
+        .flat()
+        .sort(
+          (a: IMosaic.IMosaic, b: IMosaic.IMosaic): number => {
+            if (a.name > b.name) {
+              return 1;
+            }
 
-          if (a.name < b.name) {
-            return -1;
-          }
+            if (a.name < b.name) {
+              return -1;
+            }
 
-          return 0;
-        }
-      )
+            return 0;
+          }
+        )
     };
   } catch (error: unknown) {
-    console.log(`Service | Timestamp: ${ timestamp } | Name: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
     return {
       status: 500,

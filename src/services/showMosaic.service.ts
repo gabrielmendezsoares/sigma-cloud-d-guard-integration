@@ -66,13 +66,12 @@ export const showMosaic = async (
             new TextDecoder().decode(dGuardServer.password)
           )
         },
-        (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken,
-        (): number => 0
+        (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken
       )
     );
 
-    const { data: serverVirtualMatrixWorkstationsData } = await httpClientInstance.get<{ workstations: IWorkstation.IWorkstation[]; }>(`http://${ dGuardServer.ip }:${ dGuardServer.port }/api/virtual-matrix/workstations`);
-    const workstation = serverVirtualMatrixWorkstationsData.workstations.find((workstation: IWorkstation.IWorkstation): boolean => workstation.guid === dGuardWorkstation.guid);
+    const serverVirtualMatrixWorkstations = await httpClientInstance.get<{ workstations: IWorkstation.IWorkstation[]; }>(`http://${ dGuardServer.ip }:${ dGuardServer.port }/api/virtual-matrix/workstations`);
+    const workstation = serverVirtualMatrixWorkstations.data.workstations.find((workstation: IWorkstation.IWorkstation): boolean => workstation.guid === dGuardWorkstation.guid);
     
     if (!workstation) {
       return {
@@ -81,7 +80,7 @@ export const showMosaic = async (
       };
     }
 
-    await httpClientInstance.put(
+    await httpClientInstance.put<unknown>(
       `http://${ dGuardServer.ip }:${ dGuardServer.port }/api/virtual-matrix/workstations/${ workstation.guid }/monitors/${ workstation.monitors[0].guid }/layout`,
       { layoutGuid: dGuardLayout.guid }
     );
@@ -91,7 +90,7 @@ export const showMosaic = async (
       data: undefined
     };
   } catch (error: unknown) {
-    console.log(`Service | Timestamp: ${ timestamp } | Name: showMosaic | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/showMosaic.service.ts | Location: showMosaic | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
     return { 
       status: 500,

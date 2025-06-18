@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 export const users = async (
   _req: Request, 
   _res: Response, 
-  _next: NextFunction, 
+  _next: NextFunction,
   timestamp: string
 ): Promise<IResponse.IResponse<IUser.IUser[]>> => {
   try {
@@ -41,13 +41,12 @@ export const users = async (
                     new TextDecoder().decode(password)
                   ) 
                 },
-                (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken,
-                (): number => 0
+                (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken
               )
             );
           
-            const { data: serverApiVirtualMatrixWorkstationsData } = await httpClientInstance.get<{ workstations: IWorkstation.IWorkstation[]; }>(`http://${ ip }:${ port }/api/virtual-matrix/workstations`);      
-            const workstationList = serverApiVirtualMatrixWorkstationsData.workstations;
+            const serverApiVirtualMatrixWorkstations = await httpClientInstance.get<{ workstations: IWorkstation.IWorkstation[]; }>(`http://${ ip }:${ port }/api/virtual-matrix/workstations`);      
+            const workstationList = serverApiVirtualMatrixWorkstations.data.workstations;
             const workstationGuidList = workstationList.map((workstation: IWorkstation.IWorkstation): string => workstation.guid);
             
             if (workstationGuidList.length > 0) {
@@ -104,48 +103,37 @@ export const users = async (
               }
             ).filter(Boolean) as IUser.IUser[];
           } catch (error: unknown) {
-            console.log(`Service | Timestamp: ${ timestamp } | Name: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
+            console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
             return [];
           }
         }
       )
     );
-    console.log(userList.flat().sort(
-      (a: IUser.IUser, b: IUser.IUser): number => {
-        if (a.name > b.name) {
-          return 1;
-        }
 
-        if (a.name < b.name) {
-          return -1;
-        }
-
-        return 0;
-      }
-    ));
-    
     return {
       status: 200,
-      data: userList.flat().reduce(
-        (accumulator: IUser.IUser[], userA: IUser.IUser) => {
-          const isDuplicate = accumulator.some((userB: IUser.IUser): boolean => userA.guid === userB.guid);
-          
-          if (!isDuplicate) {
-            accumulator.push({ id: userA.id, name: userA.name, guid: userA.guid });
+      data: userList
+        .flat()
+        .reduce(
+          (accumulator: IUser.IUser[], userA: IUser.IUser): IUser.IUser[] => {
+            const isDuplicate = accumulator.some((userB: IUser.IUser): boolean => userA.guid === userB.guid);
+            
+            if (!isDuplicate) {
+              accumulator.push({ id: userA.id, name: userA.name, guid: userA.guid });
+            }
+    
+            return accumulator;
+          },
+          [] as IUser.IUser[]
+        ).map(
+          (user: IUser.IUser): IUser.IUser => {
+            return { id: user.id, name: user.name }
           }
-  
-          return accumulator;
-        },
-        [] as IUser.IUser[]
-      ).map(
-        (user: IUser.IUser): IUser.IUser => {
-          return { id: user.id, name: user.name }
-        }
-      ).sort((a: IUser.IUser, b: IUser.IUser): number => a.name.localeCompare(b.name))
+        ).sort((a: IUser.IUser, b: IUser.IUser): number => a.name.localeCompare(b.name))
     };
   } catch (error: unknown) {
-    console.log(`Service | Timestamp: ${ timestamp } | Name: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
     return {
       status: 500,
