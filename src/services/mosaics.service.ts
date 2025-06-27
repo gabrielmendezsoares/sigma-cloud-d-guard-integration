@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client/storage/client.js';
 import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IResponse } from '../interfaces/index.js';
-import { IDGuardLayout, IDGuardServer, ILayout, IMosaic } from './interfaces/index.js';
+import { IDGuardLayout, IDGuardServer, ILayout, IMosaic, IResponse } from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
@@ -54,7 +53,7 @@ export const mosaics = async (
                 {
                   where: {
                     guid: { notIn: layoutGuidList },
-                    server_id: id
+                    d_guard_servers_id: id
                   }
                 }
               );
@@ -64,16 +63,16 @@ export const mosaics = async (
               {
                 where: {
                   guid: { in: layoutGuidList },
-                  server_id: id
+                  d_guard_servers_id: id
                 }
               }
             );
             
-            const dGuardLayoutGuidSet = new Set<string>(dGuardLayoutListA.map((dGuardLayout: IDGuardLayout.IDGuardLayout): string => `${ dGuardLayout.guid }_${ dGuardLayout.server_id }`));
+            const dGuardLayoutGuidSet = new Set<string>(dGuardLayoutListA.map((dGuardLayout: IDGuardLayout.IDGuardLayout): string => `${ dGuardLayout.guid }_${ dGuardLayout.d_guard_servers_id }`));
             
             const dGuardLayoutCreationList = layoutList
               .filter((layout: ILayout.ILayout): boolean => !dGuardLayoutGuidSet.has(`${ layout.guid }_${ id }`))
-              .map((layout: ILayout.ILayout): { guid: string; server_id: number; } => ({ guid: layout.guid, server_id: id }));
+              .map((layout: ILayout.ILayout): { guid: string; d_guard_servers_id: number; } => ({ guid: layout.guid, d_guard_servers_id: id }));
             
             if (dGuardLayoutCreationList.length > 0) {
               await prisma.d_guard_layouts.createMany(
@@ -88,7 +87,7 @@ export const mosaics = async (
               {
                 where: {
                   guid: { in: layoutGuidList },
-                  server_id: id
+                  d_guard_servers_id: id
                 }
               }
             );

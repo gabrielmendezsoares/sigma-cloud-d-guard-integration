@@ -1,4 +1,4 @@
-import { IResponse } from '../interfaces/index.js';
+import { IResponse } from './interfaces/index.js';
 import { IClient } from './interfaces/index.js';
 
 export const clients = (): IResponse.IResponse<IClient.IClient[]> => {

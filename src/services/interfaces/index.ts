@@ -4,5 +4,8 @@ export * as IDGuardServer from './IDGuardServer.js';
 export * as IDGuardWorkstation from './IDGuardWorkstation.js';
 export * as ILayout from './ILayout.js';
 export * as IMosaic from './IMosaic.js';
+export * as IReqBody from './IReqBody.js';
+export * as IResponse from './IResponse.js';
+export * as IResponseData from './IResponseData.js';
 export * as IUser from './IUser.js';
 export * as IWorkstation from './IWorkstation.js';

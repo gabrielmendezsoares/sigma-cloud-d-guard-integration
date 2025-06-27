@@ -1,7 +1,7 @@
 export interface IDGuardLayout {
   id: number;
   guid: string;
-  server_id: number;
+  d_guard_servers_id: number;
   created_at?: Date;
   updated_at?: Date;
 }
