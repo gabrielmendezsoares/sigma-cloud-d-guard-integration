@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client/storage/client.js';
 import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IReqBody, IResponse } from '../interfaces/index.js';
-import { IWorkstation } from './interfaces/index.js';
+import { IReqBody, IResponse, IWorkstation } from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
@@ -35,7 +34,7 @@ export const showMosaic = async (
       };
     }
     
-    const dGuardServer = await prisma.d_guard_servers.findUnique({ where: { id: dGuardLayout.server_id } });
+    const dGuardServer = await prisma.d_guard_servers.findUnique({ where: { id: dGuardLayout.d_guard_servers_id } });
     
     if (!dGuardServer) {
       return {

@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client/storage/client.js';
 import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IResponse } from '../interfaces/index.js';
-import { IDGuardServer, IDGuardWorkstation, IUser, IWorkstation } from './interfaces/index.js';
+import { IDGuardServer, IDGuardWorkstation, IResponse, IUser, IWorkstation } from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
@@ -54,7 +53,7 @@ export const users = async (
                 {
                   where: {
                     guid: { notIn: workstationGuidList },
-                    server_id: id
+                    d_guard_servers_id: id
                   }
                 }
               );
@@ -64,16 +63,16 @@ export const users = async (
               {
                 where: {
                   guid: { in: workstationGuidList },
-                  server_id: id
+                  d_guard_servers_id: id
                 }
               }
             );
             
-            const dGuardWorkstationGuidSet = new Set<string>(dGuardWorkstationListA.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): string => `${ dGuardWorkstation.guid }_${ dGuardWorkstation.server_id }`));
+            const dGuardWorkstationGuidSet = new Set<string>(dGuardWorkstationListA.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): string => `${ dGuardWorkstation.guid }_${ dGuardWorkstation.d_guard_servers_id }`));
 
             const dGuardWorkstationCreationList = workstationList
               .filter((workstation: IWorkstation.IWorkstation): boolean => !dGuardWorkstationGuidSet.has(`${ workstation.guid }_${ id }`))
-              .map((workstation: IWorkstation.IWorkstation): { guid: string; server_id: number; } => ({ guid: workstation.guid, server_id: id }));
+              .map((workstation: IWorkstation.IWorkstation): { guid: string; d_guard_servers_id: number; } => ({ guid: workstation.guid, d_guard_servers_id: id }));
               
             if (dGuardWorkstationCreationList.length > 0) {
               await prisma.d_guard_workstations.createMany(
@@ -88,7 +87,7 @@ export const users = async (
               {
                 where: {
                   guid: { in: workstationGuidList },
-                  server_id: id
+                  d_guard_servers_id: id
                 }
               }
             );
