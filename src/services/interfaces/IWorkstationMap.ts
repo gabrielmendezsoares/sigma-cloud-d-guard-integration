@@ -1,4 +1,4 @@
-export interface IWorkstation {
+export interface IWorkstationMap {
   guid: string;
   name: string;
   monitors: any;

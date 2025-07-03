@@ -1,23 +1,26 @@
-import { NextFunction, Request, Response } from 'express';
+import momentTimezone from 'moment-timezone';
 import { PrismaClient } from '@prisma/client/storage/client.js';
 import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IDGuardServer, IDGuardWorkstation, IResponse, IUser, IWorkstation } from './interfaces/index.js';
+import { IDGuardServer, IDGuardWorkstation, ILogin, IResponse, IUser, IWorkstationCreationMap, IWorkstationMap, IWorkstationMapList } from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
-export const users = async (
-  _req: Request, 
-  _res: Response, 
-  _next: NextFunction,
-  timestamp: string
-): Promise<IResponse.IResponse<IUser.IUser[]>> => {
+export const users = async (): Promise<IResponse.IResponse<IUser.IUser[]>> => {
   try {
     const dGuardServerList = await prisma.d_guard_servers.findMany();
     
     const userList = await Promise.all(
       dGuardServerList.map(
-        async ({ id, ip, port, username, password }: IDGuardServer.IDGuardServer): Promise<IUser.IUser[]> => {
+        async (dGuardServer: IDGuardServer.IDGuardServer): Promise<IUser.IUser[]> => {
           try {
+            const {
+              id,
+              ip,
+              port,
+              username,
+              password
+            } = dGuardServer;
+
             const httpClientInstance = new HttpClientUtil.HttpClient();
 
             httpClientInstance.setAuthenticationStrategy(
@@ -40,69 +43,74 @@ export const users = async (
                     new TextDecoder().decode(password)
                   ) 
                 },
-                (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken
+                (response: Axios.AxiosXHR<ILogin.ILogin>): string => response.data.login.userToken
               )
             );
           
-            const serverApiVirtualMatrixWorkstations = await httpClientInstance.get<{ workstations: IWorkstation.IWorkstation[]; }>(`http://${ ip }:${ port }/api/virtual-matrix/workstations`);      
-            const workstationList = serverApiVirtualMatrixWorkstations.data.workstations;
-            const workstationGuidList = workstationList.map((workstation: IWorkstation.IWorkstation): string => workstation.guid);
+            const workstationMapList = (await httpClientInstance.get<IWorkstationMapList.IWorkstationMapList>(`http://${ ip }:${ port }/api/virtual-matrix/workstations`)).data;      
+            const workstationMapGuidList = workstationMapList.workstations.map((workstationMap: IWorkstationMap.IWorkstationMap): string => workstationMap.guid);
             
-            if (workstationGuidList.length > 0) {
+            if (workstationMapGuidList.length > 0) {
               await prisma.d_guard_workstations.deleteMany(
                 {
                   where: {
-                    guid: { notIn: workstationGuidList },
+                    guid: { notIn: workstationMapGuidList },
                     d_guard_servers_id: id
                   }
                 }
               );
             }
             
-            const dGuardWorkstationListA = await prisma.d_guard_workstations.findMany(
+            let dGuardWorkstationList = await prisma.d_guard_workstations.findMany(
               {
                 where: {
-                  guid: { in: workstationGuidList },
+                  guid: { in: workstationMapGuidList },
                   d_guard_servers_id: id
                 }
               }
             );
             
-            const dGuardWorkstationGuidSet = new Set<string>(dGuardWorkstationListA.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): string => `${ dGuardWorkstation.guid }_${ dGuardWorkstation.d_guard_servers_id }`));
+            const dGuardWorkstationGuidSet = new Set<string>(dGuardWorkstationList.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): string => `${ dGuardWorkstation.guid }_${ dGuardWorkstation.d_guard_servers_id }`));
 
-            const dGuardWorkstationCreationList = workstationList
-              .filter((workstation: IWorkstation.IWorkstation): boolean => !dGuardWorkstationGuidSet.has(`${ workstation.guid }_${ id }`))
-              .map((workstation: IWorkstation.IWorkstation): { guid: string; d_guard_servers_id: number; } => ({ guid: workstation.guid, d_guard_servers_id: id }));
+            const workstationCreationMapList = workstationMapList.workstations
+              .filter((workstationMap: IWorkstationMap.IWorkstationMap): boolean => !dGuardWorkstationGuidSet.has(`${ workstationMap.guid }_${ id }`))
+              .map((workstationMap: IWorkstationMap.IWorkstationMap): IWorkstationCreationMap.IWorkstationCreationMap => ({ guid: workstationMap.guid, d_guard_servers_id: id }));
               
-            if (dGuardWorkstationCreationList.length > 0) {
+            if (workstationCreationMapList.length > 0) {
               await prisma.d_guard_workstations.createMany(
                 {
-                  data: dGuardWorkstationCreationList,
+                  data: workstationCreationMapList,
                   skipDuplicates: true
                 }
               );
             }
           
-            const dGuardWorkstationListB = await prisma.d_guard_workstations.findMany(
+            dGuardWorkstationList = await prisma.d_guard_workstations.findMany(
               {
                 where: {
-                  guid: { in: workstationGuidList },
+                  guid: { in: workstationMapGuidList },
                   d_guard_servers_id: id
                 }
               }
             );
  
-            const dGuardWorkstationMap = new Map<string, IDGuardWorkstation.IDGuardWorkstation>(dGuardWorkstationListB.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): [string, IDGuardWorkstation.IDGuardWorkstation] => [dGuardWorkstation.guid, dGuardWorkstation]));
+            const dGuardWorkstationMap = new Map<string, IDGuardWorkstation.IDGuardWorkstation>(dGuardWorkstationList.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): [string, IDGuardWorkstation.IDGuardWorkstation] => [dGuardWorkstation.guid, dGuardWorkstation]));
           
-            return workstationList.map(
-              (workstation: IWorkstation.IWorkstation): IUser.IUser | null => {
-                const dGuardWorkstation = dGuardWorkstationMap.get(workstation.guid);
+            return workstationMapList.workstations.map(
+              (workstationMap: IWorkstationMap.IWorkstationMap): IUser.IUser | null => {
+                const dGuardWorkstation = dGuardWorkstationMap.get(workstationMap.guid);
                 
-                return dGuardWorkstation ? { id: dGuardWorkstation.id, name: workstation.name, guid: workstation.guid } : null;
+                return dGuardWorkstation 
+                  ? { 
+                      id: dGuardWorkstation.id, 
+                      name: workstationMap.name, 
+                      guid: workstationMap.guid 
+                    } 
+                  : null;
               }
             ).filter(Boolean) as IUser.IUser[];
           } catch (error: unknown) {
-            console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
+            console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
             return [];
           }
@@ -114,25 +122,11 @@ export const users = async (
       status: 200,
       data: userList
         .flat()
-        .reduce(
-          (accumulator: IUser.IUser[], userA: IUser.IUser): IUser.IUser[] => {
-            const isDuplicate = accumulator.some((userB: IUser.IUser): boolean => userA.guid === userB.guid);
-            
-            if (!isDuplicate) {
-              accumulator.push({ id: userA.id, name: userA.name, guid: userA.guid });
-            }
-    
-            return accumulator;
-          },
-          [] as IUser.IUser[]
-        ).map(
-          (user: IUser.IUser): IUser.IUser => {
-            return { id: user.id, name: user.name }
-          }
-        ).sort((a: IUser.IUser, b: IUser.IUser): number => a.name.localeCompare(b.name))
+        .filter((userA: IUser.IUser, index: number, self: IUser.IUser[]): boolean => index === self.findIndex((userB: IUser.IUser): boolean => userA.guid === userB.guid))
+        .sort((userA: IUser.IUser, userB: IUser.IUser): number => userA.name.localeCompare(userB.name))
     };
   } catch (error: unknown) {
-    console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
     return {
       status: 500,

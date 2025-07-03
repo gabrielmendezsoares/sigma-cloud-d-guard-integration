@@ -1,4 +1,4 @@
-export interface ILayout {
+export interface ILayoutMap {
   guid: string;
   name: string;
 }
