@@ -1,23 +1,26 @@
-import { NextFunction, Request, Response } from 'express';
+import momentTimezone from 'moment-timezone';
 import { PrismaClient } from '@prisma/client/storage/client.js';
 import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IDGuardLayout, IDGuardServer, ILayout, IMosaic, IResponse } from './interfaces/index.js';
+import { IDGuardServer, IDGuardLayout, ILayoutCreationMap, ILayoutMap, ILayoutMapList, ILogin, IMosaic, IResponse } from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
-export const mosaics = async (
-  _req: Request, 
-  _res: Response, 
-  _next: NextFunction, 
-  timestamp: string
-): Promise<IResponse.IResponse<IMosaic.IMosaic[]>> => {
+export const mosaics = async (): Promise<IResponse.IResponse<IMosaic.IMosaic[]>> => {
   try {
     const dGuardServerList = await prisma.d_guard_servers.findMany();
-    
+        
     const mosaicList = await Promise.all(
       dGuardServerList.map(
-        async ({ id, ip, port, username, password }: IDGuardServer.IDGuardServer): Promise<IMosaic.IMosaic[]> => {
+        async (dGuardServer: IDGuardServer.IDGuardServer): Promise<IMosaic.IMosaic[]> => {
           try {
+            const {
+              id,
+              ip,
+              port,
+              username,
+              password
+            } = dGuardServer;
+
             const httpClientInstance = new HttpClientUtil.HttpClient();
 
             httpClientInstance.setAuthenticationStrategy(
@@ -40,69 +43,73 @@ export const mosaics = async (
                     new TextDecoder().decode(password)
                   ) 
                 },
-                (response: Axios.AxiosXHR<{ login: { userToken: string; }; }>): string => response.data?.login?.userToken
+                (response: Axios.AxiosXHR<ILogin.ILogin>): string => response.data.login.userToken
               )
             );
           
-            const serverApiVirtualMatrixLayouts = await httpClientInstance.get<{ layouts: ILayout.ILayout[]; }>(`http://${ ip }:${ port }/api/virtual-matrix/layouts`);      
-            const layoutList = serverApiVirtualMatrixLayouts.data.layouts;
-            const layoutGuidList = layoutList.map((layout: ILayout.ILayout): string => layout.guid);
+            const layoutMapList = (await httpClientInstance.get<ILayoutMapList.ILayoutMapList>(`http://${ ip }:${ port }/api/virtual-matrix/layouts`)).data;      
+            const layoutMapGuidList = layoutMapList.layouts.map((layoutMap: ILayoutMap.ILayoutMap): string => layoutMap.guid);
             
-            if (layoutGuidList.length > 0) {
+            if (layoutMapGuidList.length > 0) {
               await prisma.d_guard_layouts.deleteMany(
                 {
                   where: {
-                    guid: { notIn: layoutGuidList },
+                    guid: { notIn: layoutMapGuidList },
                     d_guard_servers_id: id
                   }
                 }
               );
             }
-
-            const dGuardLayoutListA = await prisma.d_guard_layouts.findMany(
+            
+            let dGuardLayoutList = await prisma.d_guard_layouts.findMany(
               {
                 where: {
-                  guid: { in: layoutGuidList },
+                  guid: { in: layoutMapGuidList },
                   d_guard_servers_id: id
                 }
               }
             );
             
-            const dGuardLayoutGuidSet = new Set<string>(dGuardLayoutListA.map((dGuardLayout: IDGuardLayout.IDGuardLayout): string => `${ dGuardLayout.guid }_${ dGuardLayout.d_guard_servers_id }`));
-            
-            const dGuardLayoutCreationList = layoutList
-              .filter((layout: ILayout.ILayout): boolean => !dGuardLayoutGuidSet.has(`${ layout.guid }_${ id }`))
-              .map((layout: ILayout.ILayout): { guid: string; d_guard_servers_id: number; } => ({ guid: layout.guid, d_guard_servers_id: id }));
-            
-            if (dGuardLayoutCreationList.length > 0) {
+            const dGuardLayoutGuidSet = new Set<string>(dGuardLayoutList.map((dGuardLayout: IDGuardLayout.IDGuardLayout): string => `${ dGuardLayout.guid }_${ dGuardLayout.d_guard_servers_id }`));
+
+            const layoutCreationMapList = layoutMapList.layouts
+              .filter((layoutMap: ILayoutMap.ILayoutMap): boolean => !dGuardLayoutGuidSet.has(`${ layoutMap.guid }_${ id }`))
+              .map((layoutMap: ILayoutMap.ILayoutMap): ILayoutCreationMap.ILayoutCreationMap => ({ guid: layoutMap.guid, d_guard_servers_id: id }));
+              
+            if (layoutCreationMapList.length > 0) {
               await prisma.d_guard_layouts.createMany(
                 {
-                  data: dGuardLayoutCreationList,
+                  data: layoutCreationMapList,
                   skipDuplicates: true
                 }
               );
             }
           
-            const dGuardLayoutListB = await prisma.d_guard_layouts.findMany(
+            dGuardLayoutList = await prisma.d_guard_layouts.findMany(
               {
                 where: {
-                  guid: { in: layoutGuidList },
+                  guid: { in: layoutMapGuidList },
                   d_guard_servers_id: id
                 }
               }
             );
+  
+            const dGuardLayoutMap = new Map<string, IDGuardLayout.IDGuardLayout>(dGuardLayoutList.map((dGuardLayout: IDGuardLayout.IDGuardLayout): [string, IDGuardLayout.IDGuardLayout] => [dGuardLayout.guid, dGuardLayout]));
           
-            const dGuardLayoutMap = new Map<string, IDGuardLayout.IDGuardLayout>(dGuardLayoutListB.map((dGuardLayout: IDGuardLayout.IDGuardLayout): [string, IDGuardLayout.IDGuardLayout] => [dGuardLayout.guid, dGuardLayout]));
-          
-            return layoutList.map(
-              (layout: ILayout.ILayout): IMosaic.IMosaic | null => {
-                const dGuardLayout = dGuardLayoutMap.get(layout.guid);
+            return layoutMapList.layouts.map(
+              (layoutMap: ILayoutMap.ILayoutMap): IMosaic.IMosaic | null => {
+                const dGuardLayout = dGuardLayoutMap.get(layoutMap.guid);
                 
-                return dGuardLayout ? { id: dGuardLayout.id, name: layout.name } : null;
+                return dGuardLayout 
+                  ? { 
+                      id: dGuardLayout.id, 
+                      name: layoutMap.name
+                    } 
+                  : null;
               }
             ).filter(Boolean) as IMosaic.IMosaic[];
           } catch (error: unknown) {
-            console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
+            console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
             return [];
           }
@@ -114,22 +121,10 @@ export const mosaics = async (
       status: 200,
       data: mosaicList
         .flat()
-        .sort(
-          (a: IMosaic.IMosaic, b: IMosaic.IMosaic): number => {
-            if (a.name > b.name) {
-              return 1;
-            }
-
-            if (a.name < b.name) {
-              return -1;
-            }
-
-            return 0;
-          }
-        )
+        .sort((mosaicA: IMosaic.IMosaic, mosaicB: IMosaic.IMosaic): number => mosaicA.name.localeCompare(mosaicB.name))
     };
   } catch (error: unknown) {
-    console.log(`Error | Timestamp: ${ timestamp } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
 
     return {
       status: 500,
