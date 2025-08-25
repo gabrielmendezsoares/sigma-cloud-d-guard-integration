@@ -1,0 +1,608 @@
+openapi: 3.0.3
+info:
+  title: 🎥 Sigma Cloud D-Guard Integration
+  version: 3.0.1
+  description: |
+    ## 📋 Overview
+
+    This service provides comprehensive management and integration for the Sigma Cloud D-Guard ecosystem, focusing on synchronizing and maintaining up-to-date information about clients, mosaics (virtual matrix layouts), and users (workstations). It acts as a middleware layer connecting local data storage with multiple active D-Guard servers, ensuring consistent, real-time reflection of system configurations.
+
+    A key feature is the ability to dynamically change virtual matrix layouts on user workstations in response to events triggered within the Sigma Cloud platform. When a relevant event occurs, the service assigns the appropriate layout to the user’s workstation, enabling seamless, event-driven display updates.
+
+    The service communicates securely with D-Guard servers via authenticated HTTP APIs, leveraging encrypted credentials and token-based authentication. It retrieves, updates, and synchronizes complex entities such as mosaics and users, while managing data lifecycle events like additions, updates, and removals.
+
+    Designed for robustness and scalability, this integration provides structured data outputs and enables actionable workflows, supported by detailed logging and error handling for operational reliability.
+
+    ### 🎯 Objectives
+
+    - Synchronize and maintain up-to-date information for clients, mosaics (layouts), and users (workstations) across multiple active Sigma Cloud D-Guard servers
+    - Enable dynamic assignment and switching of virtual matrix layouts on user workstations triggered by Sigma Cloud events
+    - Securely communicate with D-Guard servers using encrypted credentials and token-based authentication
+    - Manage lifecycle operations for mosaics and users, including addition, update, and removal to ensure data consistency
+    - Provide robust error handling and detailed logging for reliable operational monitoring
+    - Support scalable, event-driven integration to enhance situational awareness and display management
+    - Deliver structured, real-time data outputs to facilitate actionable workflows and seamless Sigma Cloud platform integration
+servers:
+  - url: http://localhost:40001
+    description: Development server
+components:
+  securitySchemes:
+    Basic:
+      type: http
+      scheme: basic
+      description: Basic authentication using username and password
+    Bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer authentication using JWT token
+  schemas:
+    IResponseData:
+      type: object
+      required:
+        - message
+        - suggestion
+      properties:
+        message:
+          type: string
+          description: Human-readable error message.
+          example: "Authentication token has expired."
+        suggestion:
+          type: string
+          description: Suggested action to resolve the error.
+          example: "Please sign in again to obtain a new token."
+    IShowMosaicReqBody:
+      type: object
+      required:
+        - mosaicId
+        - userId
+      properties:
+        mosaicId:
+          type: integer
+          description: ID of the mosaic layout to show
+          example: 123
+        userId:
+          type: integer
+          description: ID of the user workstation to update
+          example: 456
+    IGetAuthenticationResponseData:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - username
+            - roleList
+            - token
+            - expiresIn
+          properties:
+            username:
+              type: string
+              description: Username of the authenticated user.
+              example: "john.doe"
+            roleList:
+              type: array
+              description: Roles or permissions assigned to the user.
+              items:
+                type: string
+              example: ["admin", "user"]
+            token:
+              type: string
+              description: Signed JWT token for subsequent authenticated requests.
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            expiresIn:
+              type: integer
+              format: int64
+              description: Token expiration time in milliseconds.
+              example: 1726080123123
+    IGetHealthResponseData:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - cpuUsage
+            - memoryUsage
+            - port
+            - logLevel
+          properties:
+            cpuUsage:
+              type: object
+              required:
+                - name
+                - value
+              properties:
+                name:
+                  type: string
+                  description: Label for CPU usage metric.
+                  example: "Uso de CPU"
+                value:
+                  type: string
+                  description: Value of CPU usage.
+                  example: "8.1%"
+                isListeningModifiedEvent:
+                  type: boolean
+                  description: If monitor should listen for modification events.
+                  example: false
+            memoryUsage:
+              type: object
+              required:
+                - name
+                - value
+              properties:
+                name:
+                  type: string
+                  description: Label for memory usage metric.
+                  example: "Uso de memória"
+                value:
+                  type: string
+                  description: Value of memory usage.
+                  example: "8.1MB"
+                isListeningModifiedEvent:
+                  type: boolean
+                  description: If monitor should listen for modification events.
+                  example: false
+            port:
+              type: object
+              required:
+                - name
+                - value
+              properties:
+                name:
+                  type: string
+                  description: Label indicating which port the application is running on.
+                  example: "Porta"
+                value:
+                  type: string
+                  description: Port number the application is currently using.
+                  example: "3000"
+                isListeningModifiedEvent:
+                  type: boolean
+                  description: If monitor should listen for modification events.
+                  example: true
+            logLevel:
+              type: object
+              required:
+                - name
+                - value
+              properties:
+                name:
+                  type: string
+                  description: Label indicating the current logging level.
+                  example: "Nível de log"
+                value:
+                  type: string
+                  description: Current log level set for the application.
+                  example: "info"
+                isListeningModifiedEvent:
+                  type: boolean
+                  description: If monitor should listen for modification events.
+                  example: true
+tags:
+  - name: Application
+    description: Core system operations including authentication, health monitoring, and system management
+paths:
+  /api/v1/get/authentication:
+    get:
+      tags:
+        - Application
+      summary: Authenticate user and issue JWT token
+      description: |
+        Authenticates a user via Basic Authentication and issues a signed JWT token upon successful validation.
+        A request was made on it to verify credentials and generate an access token for authorized usage.
+      security:
+        - Basic: []
+      responses:
+        '200':
+          description: The request was successfully received, understood, and processed. A valid response was generated based on the request made on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IGetAuthenticationResponseData'
+              example:
+                data:
+                  username: "john.doe"
+                  roleList: ["admin", "user"]
+                  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expiresIn: 1726080123123
+        '400':
+          description: The server could not process the request due to invalid syntax, malformed data, or missing parameters. Although there was a request on it, the client must correct the request before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              examples:
+                example_1:
+                  summary: Authorization header required for secure access
+                  value:
+                    message: "Authorization header required for secure access."
+                    suggestion: "Include an Authorization header using the Basic scheme: \"Basic base64(username:password)\"."
+                example_2:
+                  summary: Authorization must use Basic authentication scheme
+                  value:
+                    message: "Authorization must use Basic authentication scheme."
+                    suggestion: "Use the Basic authentication scheme: \"Basic base64(username:password)\"."
+        '401':
+          description: The request was received and a request was made on it, but the client failed to provide valid authentication credentials. Access is denied until proper authentication is provided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              examples:
+                example_1:
+                  summary: Invalid username
+                  value:
+                    message: "Invalid username."
+                    suggestion: "Ensure the username is correct or register for an account if you don’t have one."
+                example_2:
+                  summary: Incorrect password
+                  value:
+                    message: "Incorrect password."
+                    suggestion: "Double-check your password or reset it if you’ve forgotten it."
+        '403':
+          description: Account is inactive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              example:
+                message: "Account is inactive."
+                suggestion: "Contact your administrator to request account reactivation."
+        '500':
+          description: Authentication process encountered a technical issue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              example:
+                message: "Authentication process encountered a technical issue."
+                suggestion: "Please try again later or contact support if the issue persists."
+  /api/v1/clients:
+    get:
+      tags:
+        - Application
+      summary: Retrieve all registered clients
+      description: |
+        Returns a list of all clients with their IDs, company names, and trade names.
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Successfully retrieved the list of clients.
+          content:
+            application/json:
+              schema:
+                status:
+                  type: integer
+                  example: 200
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 6590
+                      companyName:
+                        type: string
+                        example: "New Line"
+                      tradeName:
+                        type: string
+                        example: "New Line"
+              example:
+                status: 200
+                data:
+                  - id: 6590
+                    companyName: "New Line"
+                    tradeName: "New Line"
+  /api/v1/get/health:
+    get:
+      tags:
+        - Application
+      summary: Retrieve application health metrics
+      description: |
+        Returns current system health indicators such as CPU and memory usage.
+        A request was made on it to monitor the application’s operational status in real time.
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: The request was successfully received, understood, and processed. A valid response was generated based on the request made on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IGetHealthResponseData'
+              example:
+                data:
+                  cpuUsage:
+                    name: "Uso de CPU"
+                    value: "8.1%"
+                  memoryUsage:
+                    name: "Uso de memória"
+                    value: "8.1MB"
+                  port:
+                    name: "Porta"
+                    value: "3000"
+                    isListeningModifiedEvent: true
+                  logLevel:
+                    name: "Nível de log"
+                    value: "info"
+                    isListeningModifiedEvent: true
+        '400':
+          description: The server could not process the request due to invalid syntax, malformed data, or missing parameters. Although there was a request on it, the client must correct the request before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              examples:
+                example_1:
+                  summary: Missing Authorization header
+                  value:
+                    message: "Missing Authorization header."
+                    suggestion: "Include an Authorization header using the Bearer scheme: \"Bearer <token>\"."
+                example_2:
+                  summary: Invalid Authorization scheme
+                  value:
+                    message: "Invalid Authorization scheme."
+                    suggestion: "Use the Bearer authentication scheme: \"Bearer <token>\"."
+        '401':
+          description: The request was received and a request was made on it, but the client failed to provide valid authentication credentials. Access is denied until proper authentication is provided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              examples:
+                example_1:
+                  summary: Authentication token has expired
+                  value:
+                    message: "Authentication token has expired."
+                    suggestion: "Please sign in again to obtain a new token."
+                example_2:
+                  summary: Invalid authentication token
+                  value:
+                    message: "Invalid authentication token."
+                    suggestion: "Ensure your token is valid and has not been tampered with."
+                example_3:
+                  summary: Authentication token is not yet active
+                  value:
+                    message: "Authentication token is not yet active."
+                    suggestion: "Wait until the token’s start time before using it."
+                example_4:
+                  summary: Authentication token has expired
+                  value:
+                    message: "Authentication token has expired."
+                    suggestion: "Please sign in again to obtain a new token."
+        '403':
+          description: Missing required role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              example:
+                message: "Missing required role."
+                suggestion: "If you believe this is an error, contact your administrator to request appropriate access."    
+        '500':
+          description: The server encountered an unexpected error while processing the request. A request was made on it, but the server failed to complete the operation due to an internal issue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IResponseData'
+              examples:
+                example_1:
+                  summary: The authorization process is temporarily unavailable
+                  value:
+                    message: "The authorization process is temporarily unavailable."
+                    suggestion: "Please try again later or contact support if the issue persists."
+                example_2:
+                  summary: The authorization process encountered a technical issue
+                  value:
+                    message: "The authorization process encountered a technical issue."
+                    suggestion: "Please try again later or contact support if the issue persists."
+                example_3:
+                  summary: The health diagnostic process encountered a technical issue
+                  value:
+                    message: "The health diagnostic process encountered a technical issue."
+                    suggestion: "Please try again later or contact support if the issue persists."  
+  /api/v1/mosaics:
+    tags:
+      - Application
+    summary: Retrieve list of available mosaics (layouts)
+    description: |
+      Returns all active mosaics (layouts) retrieved and synchronized from connected Sigma Cloud D-Guard integration servers.
+      Each mosaic represents a layout available for assignment to user workstations.
+    security:
+      - Bearer: []
+    responses:
+      '200':
+        description: Successfully retrieved the list of mosaics.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: integer
+                  example: 200
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 42
+                      name:
+                        type: string
+                        example: "Main Control Room Layout"
+            example:
+              status: 200
+              data:
+                - id: 42
+                  name: "Main Control Room Layout"
+                - id: 73
+                  name: "Secondary Site Layout"
+      '500':
+        description: Server error while retrieving mosaics.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: integer
+                  example: 500
+                data:
+                  type: array
+                  items: {}
+            example:
+              status: 500
+              data: []
+  /api/v1/showMosaic:
+    put:
+      tags:
+        - Application
+      summary: Show a mosaic layout on a user's workstation monitor
+      description: |
+        Assigns the specified mosaic layout to the primary monitor of the given user workstation.
+        Validates the mosaic and user IDs, authenticates with the integration server, and updates the workstation layout.
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IShowMosaicReqBody'
+        example:
+          mosaicId: 123
+          userId: 456
+      responses:
+        '200':
+          description: Mosaic layout successfully assigned to the user's monitor.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  data:
+                    type: "null"
+                    nullable: true
+              example:
+                status: 200
+                data: null
+        '400':
+          description: Bad request - mosaicId or userId missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 400
+                  data:
+                    type: "null"
+                    nullable: true
+              example:
+                status: 400
+                data: null
+        '404':
+          description: Mosaic layout, user workstation, or server not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 404
+                  data:
+                    type: "null"
+                    nullable: true
+              example:
+                status: 404
+                data: null
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 500
+                  data:
+                    type: "null"
+                    nullable: true
+              example:
+                status: 500
+                data: null
+  /api/v1/users:
+    get:
+      tags:
+        - Application
+      summary: Retrieve synchronized list of users (workstations)
+      description: |
+        Returns a list of users mapped from synchronized workstations across active Sigma Cloud D-Guard integration servers.
+        This endpoint queries registered servers, fetches current workstations, synchronizes them with the database, and returns consolidated user data.
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Successfully retrieved list of users.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 101
+                        name:
+                          type: string
+                          example: "John Doe"
+                        guid:
+                          type: string
+                          format: uuid
+                          example: "123e4567-e89b-12d3-a456-426614174000"
+              example:
+                status: 200
+                data:
+                  - id: 101
+                    name: "John Doe"
+                    guid: "123e4567-e89b-12d3-a456-426614174000"
+                  - id: 102
+                    name: "Jane Smith"
+                    guid: "223e4567-e89b-12d3-a456-426614174001"
+        '500':
+          description: Server error while retrieving users.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 500
+                  data:
+                    type: array
+                    items: {}
+              example:
+                status: 500
+                data: []

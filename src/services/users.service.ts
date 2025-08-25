@@ -1,25 +1,91 @@
-import momentTimezone from 'moment-timezone';
-import { PrismaClient } from '@prisma/client/storage/client.js';
-import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IDGuardServer, IDGuardWorkstation, ILogin, IResponse, IUser, IWorkstationCreationMap, IWorkstationMap, IWorkstationMapList } from './interfaces/index.js';
+import { PrismaClient, sigma_cloud_d_guard_integration_servers, sigma_cloud_d_guard_integration_workstations } from '@prisma/client/storage/client.js';
+import { cryptographyUtil, HttpClientUtil, loggerUtil, BasicAndBearerStrategy } from '../../expressium/index.js';
+import { ILoginMap, IResponse, IUserMap, IWorkstationCreationMap, IWorkstationMap, IWorkstationMapList} from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
-export const users = async (): Promise<IResponse.IResponse<IUser.IUser[]>> => {
-  try {
-    const dGuardServerList = await prisma.d_guard_servers.findMany();
+const synchronizeUsers = async (
+  sigmaCloudDGuardIntegrationServer: sigma_cloud_d_guard_integration_servers,
+  workstationMapList: IWorkstationMap.IWorkstationMap[]
+): Promise<IUserMap.IUserMap[]> => {
+  const workstationMapGuidList = workstationMapList.map((workstationMap: IWorkstationMap.IWorkstationMap): string => workstationMap.guid);
+  const { id } = sigmaCloudDGuardIntegrationServer;
+            
+  await prisma.sigma_cloud_d_guard_integration_workstations.deleteMany(
+    {
+      where: {
+        guid: { notIn: workstationMapGuidList },
+        sigma_cloud_d_guard_integration_server_id: id
+      }
+    }
+  );
+  
+  let sigmaCloudDGuardIntegrationWorkstationList = await prisma.sigma_cloud_d_guard_integration_workstations.findMany(
+    {
+      where: {
+        guid: { in: workstationMapGuidList },
+        sigma_cloud_d_guard_integration_server_id: id
+      }
+    }
+  );
+  
+  const identifierSet = new Set<string>(sigmaCloudDGuardIntegrationWorkstationList.map((sigmaCloudDGuardIntegrationWorkstation: sigma_cloud_d_guard_integration_workstations): string => `${ sigmaCloudDGuardIntegrationWorkstation.guid }_${ sigmaCloudDGuardIntegrationWorkstation.sigma_cloud_d_guard_integration_server_id }`));
+
+  const workstationCreationMapList = workstationMapList
+    .filter((workstationMap: IWorkstationMap.IWorkstationMap): boolean => !identifierSet.has(`${ workstationMap.guid }_${ id }`))
+    .map((workstationMap: IWorkstationMap.IWorkstationMap): IWorkstationCreationMap.IWorkstationCreationMap => ({ guid: workstationMap.guid, sigma_cloud_d_guard_integration_server_id: id }));
     
-    const userList = await Promise.all(
-      dGuardServerList.map(
-        async (dGuardServer: IDGuardServer.IDGuardServer): Promise<IUser.IUser[]> => {
+  if (workstationCreationMapList.length) {
+    await prisma.sigma_cloud_d_guard_integration_workstations.createMany(
+      {
+        data: workstationCreationMapList,
+        skipDuplicates: true
+      }
+    );
+  }
+
+  sigmaCloudDGuardIntegrationWorkstationList = await prisma.sigma_cloud_d_guard_integration_workstations.findMany(
+    {
+      where: {
+        guid: { in: workstationMapGuidList },
+        sigma_cloud_d_guard_integration_server_id: id
+      }
+    }
+  );
+
+  const sigmaCloudDGuardIntegrationWorkstationMap = new Map<string,sigma_cloud_d_guard_integration_workstations>(sigmaCloudDGuardIntegrationWorkstationList.map((sigmaCloudDGuardIntegrationWorkstation:sigma_cloud_d_guard_integration_workstations): [string,sigma_cloud_d_guard_integration_workstations] => [sigmaCloudDGuardIntegrationWorkstation.guid, sigmaCloudDGuardIntegrationWorkstation]));
+
+  return workstationMapList.flatMap(
+    (workstationMap: IWorkstationMap.IWorkstationMap): IUserMap.IUserMap[] => {
+      const sigmaCloudDGuardIntegrationWorkstation = sigmaCloudDGuardIntegrationWorkstationMap.get(workstationMap.guid);
+      
+      return sigmaCloudDGuardIntegrationWorkstation 
+        ? [
+            { 
+              id: sigmaCloudDGuardIntegrationWorkstation.id, 
+              name: workstationMap.name,
+              guid: workstationMap.guid
+            }
+          ] 
+        : [];
+    }
+  ).filter(Boolean);
+};
+
+export const users = async (): Promise<IResponse.IResponse<IUserMap.IUserMap[]>> => {
+  try {
+    const sigmaCloudDGuardIntegrationServerList = await prisma.sigma_cloud_d_guard_integration_servers.findMany({ where: { is_sigma_cloud_d_guard_integration_server_active: true } });
+        
+    const userMapList = await Promise.all(
+      sigmaCloudDGuardIntegrationServerList.map(
+        async (sigmaCloudDGuardIntegrationServer: sigma_cloud_d_guard_integration_servers): Promise<IUserMap.IUserMap[]> => {
           try {
             const {
-              id,
               ip,
               port,
               username,
               password
-            } = dGuardServer;
+            } = sigmaCloudDGuardIntegrationServer;
 
             const httpClientInstance = new HttpClientUtil.HttpClient();
 
@@ -33,84 +99,26 @@ export const users = async (): Promise<IResponse.IResponse<IUser.IUser[]>> => {
                 undefined,
                 { 
                   username: cryptographyUtil.decryptFromAes256Cbc(
-                    process.env.D_GUARD_SERVERS_USERNAME_ENCRYPTION_KEY as string, 
-                    process.env.D_GUARD_SERVERS_USERNAME_IV_STRING as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_USERNAME_ENCRYPTION_KEY as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_USERNAME_IV_STRING as string, 
                     new TextDecoder().decode(username)
                   ), 
                   password: cryptographyUtil.decryptFromAes256Cbc(
-                    process.env.D_GUARD_SERVERS_PASSWORD_ENCRYPTION_KEY as string, 
-                    process.env.D_GUARD_SERVERS_PASSWORD_IV_STRING as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_PASSWORD_ENCRYPTION_KEY as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_PASSWORD_IV_STRING as string, 
                     new TextDecoder().decode(password)
                   ) 
                 },
-                (response: Axios.AxiosXHR<ILogin.ILogin>): string => response.data.login.userToken
+                (response: Axios.AxiosXHR<ILoginMap.ILoginMap>): string => response.data.login.userToken
               )
             );
           
-            const workstationMapList = (await httpClientInstance.get<IWorkstationMapList.IWorkstationMapList>(`http://${ ip }:${ port }/api/virtual-matrix/workstations`)).data;      
-            const workstationMapGuidList = workstationMapList.workstations.map((workstationMap: IWorkstationMap.IWorkstationMap): string => workstationMap.guid);
+            const response = await httpClientInstance.get<IWorkstationMapList.IWorkstationMapList>(`http://${ ip }:${ port }/api/virtual-matrix/workstations`);  
+            const workstationMapList = response.data.workstations;
             
-            if (workstationMapGuidList.length > 0) {
-              await prisma.d_guard_workstations.deleteMany(
-                {
-                  where: {
-                    guid: { notIn: workstationMapGuidList },
-                    d_guard_servers_id: id
-                  }
-                }
-              );
-            }
-            
-            let dGuardWorkstationList = await prisma.d_guard_workstations.findMany(
-              {
-                where: {
-                  guid: { in: workstationMapGuidList },
-                  d_guard_servers_id: id
-                }
-              }
-            );
-            
-            const dGuardWorkstationGuidSet = new Set<string>(dGuardWorkstationList.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): string => `${ dGuardWorkstation.guid }_${ dGuardWorkstation.d_guard_servers_id }`));
-
-            const workstationCreationMapList = workstationMapList.workstations
-              .filter((workstationMap: IWorkstationMap.IWorkstationMap): boolean => !dGuardWorkstationGuidSet.has(`${ workstationMap.guid }_${ id }`))
-              .map((workstationMap: IWorkstationMap.IWorkstationMap): IWorkstationCreationMap.IWorkstationCreationMap => ({ guid: workstationMap.guid, d_guard_servers_id: id }));
-              
-            if (workstationCreationMapList.length > 0) {
-              await prisma.d_guard_workstations.createMany(
-                {
-                  data: workstationCreationMapList,
-                  skipDuplicates: true
-                }
-              );
-            }
-          
-            dGuardWorkstationList = await prisma.d_guard_workstations.findMany(
-              {
-                where: {
-                  guid: { in: workstationMapGuidList },
-                  d_guard_servers_id: id
-                }
-              }
-            );
- 
-            const dGuardWorkstationMap = new Map<string, IDGuardWorkstation.IDGuardWorkstation>(dGuardWorkstationList.map((dGuardWorkstation: IDGuardWorkstation.IDGuardWorkstation): [string, IDGuardWorkstation.IDGuardWorkstation] => [dGuardWorkstation.guid, dGuardWorkstation]));
-          
-            return workstationMapList.workstations.map(
-              (workstationMap: IWorkstationMap.IWorkstationMap): IUser.IUser | null => {
-                const dGuardWorkstation = dGuardWorkstationMap.get(workstationMap.guid);
-                
-                return dGuardWorkstation 
-                  ? { 
-                      id: dGuardWorkstation.id, 
-                      name: workstationMap.name, 
-                      guid: workstationMap.guid 
-                    } 
-                  : null;
-              }
-            ).filter(Boolean) as IUser.IUser[];
+            return synchronizeUsers(sigmaCloudDGuardIntegrationServer, workstationMapList);
           } catch (error: unknown) {
-            console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
+            loggerUtil.error(error instanceof Error ? error.message : String(error));
 
             return [];
           }
@@ -120,13 +128,12 @@ export const users = async (): Promise<IResponse.IResponse<IUser.IUser[]>> => {
 
     return {
       status: 200,
-      data: userList
+      data: userMapList
         .flat()
-        .filter((userA: IUser.IUser, index: number, self: IUser.IUser[]): boolean => index === self.findIndex((userB: IUser.IUser): boolean => userA.guid === userB.guid))
-        .sort((userA: IUser.IUser, userB: IUser.IUser): number => userA.name.localeCompare(userB.name))
+        .sort((userMapA: IUserMap.IUserMap, userMapB: IUserMap.IUserMap): number => userMapA.name.localeCompare(userMapB.name))
     };
   } catch (error: unknown) {
-    console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/users.service.ts | Location: users | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    loggerUtil.error(error instanceof Error ? error.message : String(error));
 
     return {
       status: 500,

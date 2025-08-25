@@ -1,7 +1,6 @@
-import { IResponse } from './interfaces/index.js';
-import { IClient } from './interfaces/index.js';
+import { IClientMap, IResponse } from './interfaces/index.js';
 
-export const clients = (): IResponse.IResponse<IClient.IClient[]> => {
+export const clients = (): IResponse.IResponse<IClientMap.IClientMap[]> => {
   return {
     status: 200,
     data: [
