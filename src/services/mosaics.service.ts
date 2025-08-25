@@ -1,25 +1,90 @@
-import momentTimezone from 'moment-timezone';
-import { PrismaClient } from '@prisma/client/storage/client.js';
-import { cryptographyUtil, HttpClientUtil, BasicAndBearerStrategy } from '../../expressium/src/index.js';
-import { IDGuardServer, IDGuardLayout, ILayoutCreationMap, ILayoutMap, ILayoutMapList, ILogin, IMosaic, IResponse } from './interfaces/index.js';
+import { PrismaClient, sigma_cloud_d_guard_integration_layouts, sigma_cloud_d_guard_integration_servers } from '@prisma/client/storage/client.js';
+import { cryptographyUtil, HttpClientUtil, loggerUtil, BasicAndBearerStrategy } from '../../expressium/index.js';
+import { ILayoutCreationMap, ILayoutMap, ILayoutMapList, ILoginMap, IMosaicMap, IResponse } from './interfaces/index.js';
 
 const prisma = new PrismaClient();
 
-export const mosaics = async (): Promise<IResponse.IResponse<IMosaic.IMosaic[]>> => {
+const synchronizeMosaics = async (
+  sigmaCloudDGuardIntegrationServer: sigma_cloud_d_guard_integration_servers,
+  layoutMapList: ILayoutMap.ILayoutMap[]
+): Promise<IMosaicMap.IMosaicMap[]> => {
+  const layoutMapGuidList = layoutMapList.map((layoutMap: ILayoutMap.ILayoutMap): string => layoutMap.guid);
+  const { id } = sigmaCloudDGuardIntegrationServer;
+            
+  await prisma.sigma_cloud_d_guard_integration_layouts.deleteMany(
+    {
+      where: {
+        guid: { notIn: layoutMapGuidList },
+        sigma_cloud_d_guard_integration_server_id: id
+      }
+    }
+  );
+  
+  let sigmaCloudDGuardIntegrationLayoutList = await prisma.sigma_cloud_d_guard_integration_layouts.findMany(
+    {
+      where: {
+        guid: { in: layoutMapGuidList },
+        sigma_cloud_d_guard_integration_server_id: id
+      }
+    }
+  );
+  
+  const identifierSet = new Set<string>(sigmaCloudDGuardIntegrationLayoutList.map((sigmaCloudDGuardIntegrationLayout: sigma_cloud_d_guard_integration_layouts): string => `${ sigmaCloudDGuardIntegrationLayout.guid }_${ sigmaCloudDGuardIntegrationLayout.sigma_cloud_d_guard_integration_server_id }`));
+
+  const layoutCreationMapList = layoutMapList
+    .filter((layoutMap: ILayoutMap.ILayoutMap): boolean => !identifierSet.has(`${ layoutMap.guid }_${ id }`))
+    .map((layoutMap: ILayoutMap.ILayoutMap): ILayoutCreationMap.ILayoutCreationMap => ({ guid: layoutMap.guid, sigma_cloud_d_guard_integration_server_id: id }));
+    
+  if (layoutCreationMapList.length) {
+    await prisma.sigma_cloud_d_guard_integration_layouts.createMany(
+      {
+        data: layoutCreationMapList,
+        skipDuplicates: true
+      }
+    );
+  }
+
+  sigmaCloudDGuardIntegrationLayoutList = await prisma.sigma_cloud_d_guard_integration_layouts.findMany(
+    {
+      where: {
+        guid: { in: layoutMapGuidList },
+        sigma_cloud_d_guard_integration_server_id: id
+      }
+    }
+  );
+
+  const sigmaCloudDGuardIntegrationLayoutMap = new Map<string,sigma_cloud_d_guard_integration_layouts>(sigmaCloudDGuardIntegrationLayoutList.map((sigmaCloudDGuardIntegrationLayout:sigma_cloud_d_guard_integration_layouts): [string,sigma_cloud_d_guard_integration_layouts] => [sigmaCloudDGuardIntegrationLayout.guid, sigmaCloudDGuardIntegrationLayout]));
+
+  return layoutMapList.flatMap(
+    (layoutMap: ILayoutMap.ILayoutMap): IMosaicMap.IMosaicMap[] => {
+      const sigmaCloudDGuardIntegrationLayout = sigmaCloudDGuardIntegrationLayoutMap.get(layoutMap.guid);
+      
+      return sigmaCloudDGuardIntegrationLayout 
+        ? [
+            { 
+              id: sigmaCloudDGuardIntegrationLayout.id, 
+              name: layoutMap.name
+            }
+          ] 
+        : [];
+    }
+  ).filter(Boolean);
+};
+
+export const mosaics = async (): Promise<IResponse.IResponse<IMosaicMap.IMosaicMap[]>> => {
   try {
-    const dGuardServerList = await prisma.d_guard_servers.findMany();
+    const sigmaCloudDGuardIntegrationServerList = await prisma.sigma_cloud_d_guard_integration_servers.findMany({ where: { is_sigma_cloud_d_guard_integration_server_active: true } });
         
-    const mosaicList = await Promise.all(
-      dGuardServerList.map(
-        async (dGuardServer: IDGuardServer.IDGuardServer): Promise<IMosaic.IMosaic[]> => {
+    const mosaicMapList = await Promise.all(
+      sigmaCloudDGuardIntegrationServerList.map(
+        async (sigmaCloudDGuardIntegrationServer: sigma_cloud_d_guard_integration_servers): Promise<IMosaicMap.IMosaicMap[]> => {
           try {
             const {
-              id,
               ip,
               port,
               username,
               password
-            } = dGuardServer;
+            } = sigmaCloudDGuardIntegrationServer;
 
             const httpClientInstance = new HttpClientUtil.HttpClient();
 
@@ -33,83 +98,26 @@ export const mosaics = async (): Promise<IResponse.IResponse<IMosaic.IMosaic[]>>
                 undefined,
                 { 
                   username: cryptographyUtil.decryptFromAes256Cbc(
-                    process.env.D_GUARD_SERVERS_USERNAME_ENCRYPTION_KEY as string, 
-                    process.env.D_GUARD_SERVERS_USERNAME_IV_STRING as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_USERNAME_ENCRYPTION_KEY as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_USERNAME_IV_STRING as string, 
                     new TextDecoder().decode(username)
                   ), 
                   password: cryptographyUtil.decryptFromAes256Cbc(
-                    process.env.D_GUARD_SERVERS_PASSWORD_ENCRYPTION_KEY as string, 
-                    process.env.D_GUARD_SERVERS_PASSWORD_IV_STRING as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_PASSWORD_ENCRYPTION_KEY as string, 
+                    process.env.SIGMA_CLOUD_D_GUARD_INTEGRATION_SERVERS_PASSWORD_IV_STRING as string, 
                     new TextDecoder().decode(password)
                   ) 
                 },
-                (response: Axios.AxiosXHR<ILogin.ILogin>): string => response.data.login.userToken
+                (response: Axios.AxiosXHR<ILoginMap.ILoginMap>): string => response.data.login.userToken
               )
             );
           
-            const layoutMapList = (await httpClientInstance.get<ILayoutMapList.ILayoutMapList>(`http://${ ip }:${ port }/api/virtual-matrix/layouts`)).data;      
-            const layoutMapGuidList = layoutMapList.layouts.map((layoutMap: ILayoutMap.ILayoutMap): string => layoutMap.guid);
+            const response = await httpClientInstance.get<ILayoutMapList.ILayoutMapList>(`http://${ ip }:${ port }/api/virtual-matrix/layouts`);  
+            const layoutMapList = response.data.layouts;
             
-            if (layoutMapGuidList.length > 0) {
-              await prisma.d_guard_layouts.deleteMany(
-                {
-                  where: {
-                    guid: { notIn: layoutMapGuidList },
-                    d_guard_servers_id: id
-                  }
-                }
-              );
-            }
-            
-            let dGuardLayoutList = await prisma.d_guard_layouts.findMany(
-              {
-                where: {
-                  guid: { in: layoutMapGuidList },
-                  d_guard_servers_id: id
-                }
-              }
-            );
-            
-            const dGuardLayoutGuidSet = new Set<string>(dGuardLayoutList.map((dGuardLayout: IDGuardLayout.IDGuardLayout): string => `${ dGuardLayout.guid }_${ dGuardLayout.d_guard_servers_id }`));
-
-            const layoutCreationMapList = layoutMapList.layouts
-              .filter((layoutMap: ILayoutMap.ILayoutMap): boolean => !dGuardLayoutGuidSet.has(`${ layoutMap.guid }_${ id }`))
-              .map((layoutMap: ILayoutMap.ILayoutMap): ILayoutCreationMap.ILayoutCreationMap => ({ guid: layoutMap.guid, d_guard_servers_id: id }));
-              
-            if (layoutCreationMapList.length > 0) {
-              await prisma.d_guard_layouts.createMany(
-                {
-                  data: layoutCreationMapList,
-                  skipDuplicates: true
-                }
-              );
-            }
-          
-            dGuardLayoutList = await prisma.d_guard_layouts.findMany(
-              {
-                where: {
-                  guid: { in: layoutMapGuidList },
-                  d_guard_servers_id: id
-                }
-              }
-            );
-  
-            const dGuardLayoutMap = new Map<string, IDGuardLayout.IDGuardLayout>(dGuardLayoutList.map((dGuardLayout: IDGuardLayout.IDGuardLayout): [string, IDGuardLayout.IDGuardLayout] => [dGuardLayout.guid, dGuardLayout]));
-          
-            return layoutMapList.layouts.map(
-              (layoutMap: ILayoutMap.ILayoutMap): IMosaic.IMosaic | null => {
-                const dGuardLayout = dGuardLayoutMap.get(layoutMap.guid);
-                
-                return dGuardLayout 
-                  ? { 
-                      id: dGuardLayout.id, 
-                      name: layoutMap.name
-                    } 
-                  : null;
-              }
-            ).filter(Boolean) as IMosaic.IMosaic[];
+            return synchronizeMosaics(sigmaCloudDGuardIntegrationServer, layoutMapList);
           } catch (error: unknown) {
-            console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
+            loggerUtil.error(error instanceof Error ? error.message : String(error));
 
             return [];
           }
@@ -119,12 +127,12 @@ export const mosaics = async (): Promise<IResponse.IResponse<IMosaic.IMosaic[]>>
 
     return {
       status: 200,
-      data: mosaicList
+      data: mosaicMapList
         .flat()
-        .sort((mosaicA: IMosaic.IMosaic, mosaicB: IMosaic.IMosaic): number => mosaicA.name.localeCompare(mosaicB.name))
+        .sort((mosaicMapA: IMosaicMap.IMosaicMap, mosaicMapB: IMosaicMap.IMosaicMap): number => mosaicMapA.name.localeCompare(mosaicMapB.name))
     };
   } catch (error: unknown) {
-    console.log(`Error | Timestamp: ${ momentTimezone().utc().format('DD-MM-YYYY HH:mm:ss') } | Path: src/services/mosaics.service.ts | Location: mosaics | Error: ${ error instanceof Error ? error.message : String(error) }`);
+    loggerUtil.error(error instanceof Error ? error.message : String(error));
 
     return {
       status: 500,
