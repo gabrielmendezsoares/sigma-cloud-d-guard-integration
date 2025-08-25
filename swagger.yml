@@ -9,10 +9,6 @@ info:
 
     A key feature is the ability to dynamically change virtual matrix layouts on user workstations in response to events triggered within the Sigma Cloud platform. When a relevant event occurs, the service assigns the appropriate layout to the user’s workstation, enabling seamless, event-driven display updates.
 
-    The service communicates securely with D-Guard servers via authenticated HTTP APIs, leveraging encrypted credentials and token-based authentication. It retrieves, updates, and synchronizes complex entities such as mosaics and users, while managing data lifecycle events like additions, updates, and removals.
-
-    Designed for robustness and scalability, this integration provides structured data outputs and enables actionable workflows, supported by detailed logging and error handling for operational reliability.
-
     ### 🎯 Objectives
 
     - Synchronize and maintain up-to-date information for clients, mosaics (layouts), and users (workstations) across multiple active Sigma Cloud D-Guard servers
