@@ -33,20 +33,6 @@ components:
       bearerFormat: JWT
       description: Bearer authentication using JWT token
   schemas:
-    IResponseData:
-      type: object
-      required:
-        - message
-        - suggestion
-      properties:
-        message:
-          type: string
-          description: Human-readable error message.
-          example: "Authentication token has expired."
-        suggestion:
-          type: string
-          description: Suggested action to resolve the error.
-          example: "Please sign in again to obtain a new token."
     IShowMosaicReqBody:
       type: object
       required:
@@ -61,6 +47,20 @@ components:
           type: integer
           description: ID of the user workstation to update
           example: 456
+    IResponseData:
+      type: object
+      required:
+        - message
+        - suggestion
+      properties:
+        message:
+          type: string
+          description: Human-readable error message.
+          example: "Authentication token has expired."
+        suggestion:
+          type: string
+          description: Suggested action to resolve the error.
+          example: "Please sign in again to obtain a new token."
     IGetAuthenticationResponseData:
       type: object
       required:
