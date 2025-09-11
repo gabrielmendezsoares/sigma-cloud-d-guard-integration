@@ -126,11 +126,19 @@ export const users = async (): Promise<IResponse.IResponse<IUserMap.IUserMap[]>>
       )
     );
 
+    const uniqueUserMap = new Map<string, IUserMap.IUserMap>();
+
+    userMapList.flat().forEach(
+      (userMap: IUserMap.IUserMap) => {
+        if (!uniqueUserMap.has(userMap.guid)) {
+          uniqueUserMap.set(userMap.guid, userMap);
+        }
+      }
+    );
+    
     return {
       status: 200,
-      data: userMapList
-        .flat()
-        .sort((userMapA: IUserMap.IUserMap, userMapB: IUserMap.IUserMap): number => userMapA.name.localeCompare(userMapB.name))
+      data: Array.from(uniqueUserMap.values()).sort((userMapA: IUserMap.IUserMap, userMapB: IUserMap.IUserMap): number => userMapA.name.localeCompare(userMapB.name))
     };
   } catch (error: unknown) {
     loggerUtil.error(error instanceof Error ? error.message : String(error));
